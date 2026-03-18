@@ -22,8 +22,10 @@
 //   Rejects trajectories where speed > max_speed or |accel| > max_accel.
 //
 // Stage 4 – Collision detection
-//   Uses the Separating Axis Theorem (SAT) between a fixed 6-point convex
-//   hexagonal ego-vehicle polygon and 4-point rectangular obstacle polygons.
+//   Uses the Separating Axis Theorem (SAT) between a fixed 4-point rectangular
+//   ego-vehicle polygon and 4-point rectangular obstacle polygons.
+//   Both polygons share the same vertex count (N_EGO_VERTS = N_OBS_VERTS = 4),
+//   matching the scenario simulation data format.
 //
 // The kernel processes N_TRAJS_PER_COL (25) trajectories and writes the
 // lowest-cost collision-free trajectory into result_buf.
@@ -37,7 +39,7 @@
 //   [85]     max_accel (m/s²)
 //   [86]     vehicle_l (m)
 //   [87]     vehicle_w (m)
-//   [88]     vehicle_margin  (extra lateral margin added to hexagon half-width)
+//   [88]     (reserved / padding – was vehicle_margin, no longer used)
 //   [89]     target_speed (m/s)
 //   [90]     time_step_now   (float encoding of int, used as obstacle time offset)
 //   [91]     n_steps         (actual number of time steps to evaluate, ≤ N_STEPS)
@@ -90,8 +92,8 @@
 #define N_STEPS          50
 #define N_SPLINE_SEGS    100
 #define N_OBS_MAX        8
-#define N_OBS_VERTS      4   // obstacle: axis-aligned rectangle
-#define N_EGO_VERTS      6   // ego vehicle: hexagonal approximation
+#define N_OBS_VERTS      4   // obstacle: axis-aligned rectangle (scenario data)
+#define N_EGO_VERTS      4   // ego vehicle: axis-aligned rectangle (same as obstacles)
 
 // Cost weights (matching the WX1 defaults from C_Planner/common/cost)
 #define W_T    1.0f
@@ -310,34 +312,29 @@ static inline int sat_collision(const float *x1, const float *y1, int n1,
 }
 
 // ============================================================
-// Build 6-point (hexagonal) ego-vehicle polygon in world frame.
+// Build 4-point rectangular ego-vehicle polygon in world frame.
 //
 //  Vehicle-local frame (x = forward, y = left):
 //
-//       P4 ────── P3
-//      /            \
-//    P5              P2
-//      \            /
+//       P3 ────── P2
+//       |          |
 //       P0 ────── P1
 //
-//   P0 = (-L/2,   -W/2)
-//   P1 = (+L/2,   -W/2)
-//   P2 = (+L/2+m,  0  )   ← side protrusion (margin m, can be 0)
-//   P3 = (+L/2,   +W/2)
-//   P4 = (-L/2,   +W/2)
-//   P5 = (-L/2-m,  0  )   ← rear protrusion
+//   P0 = (-L/2, -W/2)   rear-right
+//   P1 = (+L/2, -W/2)   front-right
+//   P2 = (+L/2, +W/2)   front-left
+//   P3 = (-L/2, +W/2)   rear-left
 //
+// Matches the 4-vertex format used by obstacle polygons in the scenario data.
 // After rotating by (cos_yaw, sin_yaw) and translating to (cx, cy):
 // ============================================================
 static inline void build_ego_polygon(float cx, float cy,
                                       float cos_yaw, float sin_yaw,
-                                      float L, float W, float margin,
+                                      float L, float W,
                                       float *px, float *py) {
   // Local corners: {lx, ly}
-  float lx[N_EGO_VERTS] = {-L * 0.5f,  L * 0.5f,  L * 0.5f + margin,
-                             L * 0.5f, -L * 0.5f, -L * 0.5f - margin};
-  float ly[N_EGO_VERTS] = {-W * 0.5f, -W * 0.5f, 0.0f,
-                             W * 0.5f,  W * 0.5f, 0.0f};
+  const float lx[N_EGO_VERTS] = {-L * 0.5f,  L * 0.5f,  L * 0.5f, -L * 0.5f};
+  const float ly[N_EGO_VERTS] = {-W * 0.5f, -W * 0.5f,  W * 0.5f,  W * 0.5f};
   for (int k = 0; k < N_EGO_VERTS; k++) {
     px[k] = cx + lx[k] * cos_yaw - ly[k] * sin_yaw;
     py[k] = cy + lx[k] * sin_yaw + ly[k] * cos_yaw;
@@ -368,7 +365,7 @@ void frenet_planner_col(bfloat16 *params_buf,   // [PARAMS_SIZE]
   float max_accel  = (float)params_buf[85];
   float vehicle_l  = (float)params_buf[86];
   float vehicle_w  = (float)params_buf[87];
-  float veh_margin = (float)params_buf[88];
+  // params_buf[88] reserved
   float target_spd = (float)params_buf[89];
   int   t_now      = (int)(float)params_buf[90];
   int   n_steps    = (int)(float)params_buf[91];
@@ -524,10 +521,10 @@ void frenet_planner_col(bfloat16 *params_buf,   // [PARAMS_SIZE]
       int obs_t = t_now + k;
       if (obs_t >= n_obs_steps) break;
 
-      // Build 6-point ego polygon at this time step
+      // Build 4-point ego rectangle at this time step
       build_ego_polygon(x_t[k], y_t[k],
                         cos_yaw_t[k], sin_yaw_t[k],
-                        vehicle_l, vehicle_w, veh_margin,
+                        vehicle_l, vehicle_w,
                         ego_px, ego_py);
 
       // Check against every obstacle at this time step

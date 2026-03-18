@@ -37,7 +37,7 @@ N_STEPS        = 50
 N_SPLINE_SEGS  = 100
 N_OBS_MAX      = 8
 N_OBS_VERTS    = 4
-N_EGO_VERTS    = 6
+N_EGO_VERTS    = 4
 
 PARAMS_SIZE    = 96
 SPLINE_SIZE    = 928
@@ -73,7 +73,7 @@ def make_sample_grid(num_width=5, num_speed=5, num_t=5,
 
 def build_params_buf(init_state, end_states_col, max_speed=13.0,
                      max_accel=5.0, vehicle_l=4.5, vehicle_w=2.0,
-                     vehicle_margin=0.0, target_speed=8.0,
+                     target_speed=8.0,
                      time_step_now=0, n_steps=N_STEPS):
     """
     Pack a single column's params buffer (PARAMS_SIZE bf16 values).
@@ -98,7 +98,7 @@ def build_params_buf(init_state, end_states_col, max_speed=13.0,
     buf[85] = bfloat16(max_accel)
     buf[86] = bfloat16(vehicle_l)
     buf[87] = bfloat16(vehicle_w)
-    buf[88] = bfloat16(vehicle_margin)
+    # buf[88] reserved (was vehicle_margin)
     buf[89] = bfloat16(target_speed)
     buf[90] = bfloat16(float(time_step_now))
     buf[91] = bfloat16(float(n_steps))
