@@ -15,3 +15,6 @@
 [submodule "third_party/aie_api"]
 	path = third_party/aie_api
 	url = https://github.com/jgmelber/aie_api
+[submodule "Sparse_Planner"]
+	path = Sparse_Planner
+	url = git@github.com:wenguang1111/Sparse_Planner.git
